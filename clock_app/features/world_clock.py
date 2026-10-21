@@ -54,9 +54,11 @@ class WorldClock(Feature):
     def __init__(self, cities: tuple[str, ...] = DEFAULT_CITIES) -> None:
         super().__init__("World")
         self.local = SystemTimeProvider()
-        self.cities: CircularDoublyLinkedList[FixedOffsetTimeProvider] = CircularDoublyLinkedList(
-            city_from_catalog(name) for name in cities
-        )
+        # Keep the ring sorted by UTC offset from the start, so that
+        # add_city (which relies on insert_sorted) preserves the order.
+        self.cities: CircularDoublyLinkedList[FixedOffsetTimeProvider] = CircularDoublyLinkedList()
+        for name in cities:
+            self.cities.insert_sorted(city_from_catalog(name), key=lambda c: c.utc_offset())
         self.cursor = RingCursor(self.cities)
 
     @property

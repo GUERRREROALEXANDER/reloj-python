@@ -46,7 +46,8 @@ class Feature(ABC):
 def format_duration(seconds: float, show_centis: bool = True) -> str:
     """Format a duration as ``HH:MM:SS.cc`` (hours only when needed)."""
     seconds = max(0.0, seconds)
-    total_centis = int(seconds * 100)
+    # Round away float noise first (0.29 * 100 == 28.999...), then truncate.
+    total_centis = int(round(seconds * 100, 6))
     centis = total_centis % 100
     total_seconds = total_centis // 100
     hours, rest = divmod(total_seconds, 3600)
