@@ -294,12 +294,22 @@ class ScrollableFrame(tk.Frame):
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self._window, width=e.width))
         self.bind_all_wheel(self.canvas)
         self.bind_all_wheel(self.inner)
+        self.bind("<Destroy>", lambda e: self.canvas.unbind_all("<MouseWheel>") if e.widget is self else None)
 
     def bind_all_wheel(self, widget: tk.Misc) -> None:
-        widget.bind("<Enter>", lambda _e: self.canvas.bind_all("<MouseWheel>", self._on_wheel))
-        widget.bind("<Leave>", lambda _e: self.canvas.unbind_all("<MouseWheel>"))
+        widget.bind("<Enter>", lambda _e: self.canvas.bind_all("<MouseWheel>", self._on_wheel), add="+")
+        widget.bind("<Leave>", self._on_leave, add="+")
+
+    def _on_leave(self, event) -> None:
+        # Moving onto a child widget also fires <Leave>; only unbind when the
+        # pointer really left the scroll area.
+        target = self.winfo_containing(event.x_root, event.y_root)
+        if target is None or not str(target).startswith(str(self.canvas)):
+            self.canvas.unbind_all("<MouseWheel>")
 
     def _on_wheel(self, event) -> None:
+        if not self.canvas.winfo_exists():
+            return
         if self.inner.winfo_height() > self.canvas.winfo_height():
             self.canvas.yview_scroll(int(-event.delta / 120), "units")
 

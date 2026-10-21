@@ -193,5 +193,7 @@ class ScrollableHorizontal(ScrollableFrame):
         self.canvas.bind("<Configure>", lambda e: None)
 
     def _on_wheel(self, event) -> None:
+        if not self.canvas.winfo_exists():
+            return
         if self.inner.winfo_width() > self.canvas.winfo_width():
             self.canvas.xview_scroll(int(-event.delta / 120), "units")

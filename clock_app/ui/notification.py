@@ -99,8 +99,10 @@ class RingingDialog(tk.Toplevel):
         self._pulse_step = 0
         self._pulse()
         self.chime.start()
-        self.bind("<Escape>", lambda _e: self._dismiss())
-        self.bind("<Return>", lambda _e: self._dismiss())
+        # "break" keeps these keys away from the global shortcuts.
+        self.bind("<Key>", lambda _e: "break")
+        self.bind("<Escape>", lambda _e: (self._dismiss(), "break")[1])
+        self.bind("<Return>", lambda _e: (self._dismiss(), "break")[1])
         self.focus_force()
 
     def _pulse(self) -> None:

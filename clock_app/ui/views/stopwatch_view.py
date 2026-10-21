@@ -85,6 +85,7 @@ class StopwatchView(View):
         self.lap_count.configure(text=f"{len(laps)} recorded" if laps else "")
         if not laps:
             self.empty_label.pack(pady=40)
+            self._rendered_laps = 0
             return
         self.empty_label.pack_forget()
         fastest = self.stopwatch.fastest_lap() if len(laps) > 1 else None

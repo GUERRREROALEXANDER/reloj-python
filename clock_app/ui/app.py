@@ -8,7 +8,7 @@ from tkinter import ttk
 
 from ..core import ClockEngine
 from ..features import AlarmManager, CountdownTimer, Feature, Stopwatch, WorldClock
-from ..structures import CircularDoublyLinkedList, RingCursor
+from ..structures import CircularDoublyLinkedList, LinkedQueue, RingCursor
 from .analog_clock import DialStyleCarousel
 from .icons import ICONS
 from .notification import RingingDialog
@@ -55,6 +55,7 @@ class ClockApp(tk.Tk):
         self.view_cursor = RingCursor(self.views)
         self.current_view: View | None = None
         self._dialog: RingingDialog | None = None
+        self._notifications: LinkedQueue[dict] = LinkedQueue()
         self._frame = 0
 
         self.bind_all("<Key>", self._on_key)
@@ -147,7 +148,10 @@ class ClockApp(tk.Tk):
         self._build_ui()
 
     def _on_key(self, event: tk.Event) -> None:
-        if isinstance(event.widget, (tk.Entry, ttk.Combobox)):
+        # Ignore keys typed in text fields, in the combobox drop-down (a
+        # Tcl-only widget that arrives as a string) and in the ringing dialog.
+        widget = event.widget
+        if isinstance(widget, (str, tk.Entry, ttk.Combobox)) or widget.winfo_toplevel() is not self:
             return
         if event.char and event.char in "12345":
             self.show_view(VIEW_CLASSES[int(event.char) - 1])
@@ -179,29 +183,30 @@ class ClockApp(tk.Tk):
 
     # ========================================================= notifications
     def _show_pending_alarm(self) -> None:
-        if self._dialog is not None or self.alarms.pending.is_empty():
-            return
-        alarm = self.alarms.pending.dequeue()
-        time_text = alarm.time_text(self.settings["use_24h"])
-        self._open_dialog(
-            alarm.label, f"It's {time_text}  ·  {alarm.days_text()}",
-            on_dismiss=lambda: self.alarms.dismiss(alarm),
-            on_snooze=lambda: self.alarms.snooze(alarm, datetime.now()),
-        )
+        # Ringing alarms join the same FIFO as timer notifications, so one
+        # dialog never replaces another: they are shown one after the other.
+        while not self.alarms.pending.is_empty():
+            alarm = self.alarms.pending.dequeue()
+            time_text = alarm.time_text(self.settings["use_24h"])
+            self._notifications.enqueue(dict(
+                title=alarm.label, message=f"It's {time_text}  ·  {alarm.days_text()}",
+                on_dismiss=lambda a=alarm: self.alarms.dismiss(a),
+                on_snooze=lambda a=alarm: self.alarms.snooze(a, datetime.now()),
+            ))
+        if self._dialog is None and not self._notifications.is_empty():
+            self._open_dialog(**self._notifications.dequeue())
 
     def _on_timer_event(self, event: str, _payload) -> None:
         if event == "finished":
             def restart() -> None:
                 self.timer.reset()
                 self.timer.start()
-            self._open_dialog("Time's up!", "Your countdown has reached zero.",
-                              on_dismiss=self.timer.reset, on_snooze=restart, snooze_text="Restart")
+            self._notifications.enqueue(dict(
+                title="Time's up!", message="Your countdown has reached zero.",
+                on_dismiss=self.timer.reset, on_snooze=restart, snooze_text="Restart",
+            ))
 
     def _open_dialog(self, title, message, on_dismiss, on_snooze=None, snooze_text="Snooze 5 min") -> None:
-        if self._dialog is not None:
-            self._dialog.chime.stop()
-            self._dialog.destroy()
-
         def finish(callback):
             def run() -> None:
                 self._dialog = None
